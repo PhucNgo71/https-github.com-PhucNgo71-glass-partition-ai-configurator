@@ -102,6 +102,45 @@ const doorTypes = {
   },
 };
 
+const doorAccessoryItems = [
+  {
+    key: 'door-closer',
+    description: 'Door closer',
+    unit: 'set',
+    rate: 0,
+  },
+  {
+    key: 'door-stopper',
+    description: 'Door stopper',
+    unit: 'set',
+    rate: 0,
+  },
+  {
+    key: 'lock-set',
+    description: 'Lock set',
+    unit: 'set',
+    rate: 0,
+  },
+  {
+    key: 'handle-set',
+    description: 'Handle set',
+    unit: 'set',
+    rate: 0,
+  },
+  {
+    key: 'hinge-pivot-set',
+    description: 'Hinges / pivot set',
+    unit: 'set',
+    rate: 0,
+  },
+  {
+    key: 'door-seals',
+    description: 'Door perimeter / acoustic seals',
+    unit: 'set',
+    rate: 0,
+  },
+];
+
 const initialRooms = [
   {
     id: crypto.randomUUID(),
@@ -374,6 +413,19 @@ function buildBoq(rooms, height, sameHeightForAllRooms = true) {
         qty: doorCount,
         unit: 'set',
         rate: door.rate,
+      });
+
+      doorAccessoryItems.forEach((accessory) => {
+        rows.push({
+          id: `${room.id}-accessory-${accessory.key}`,
+          room: room.name,
+          category: 'Door Accessory',
+          description: `${accessory.description} for ${room.doorType}`,
+          origin: 'Accessory line item added for pricing review; confirm final rate from hardware price list',
+          qty: doorCount,
+          unit: accessory.unit,
+          rate: accessory.rate,
+        });
       });
     }
 
@@ -1221,6 +1273,7 @@ function RoomRules({ room, height, sameHeightForAllRooms, selectedDoor }) {
     ['Door STC linked to door type', `${room.doorType} maps to STC ${selectedDoor.stc}.`],
     ['STC38 door', 'E100 60mm double glass door with 6+6mm clear tempered glass.'],
     ['E60 tested door', 'E60 60mm framed double glazed door with 6+8mm clear tempered glass, SGS STC 44.'],
+    ['Door accessories', 'Door closer, door stopper, lock, handle, hinges / pivot, and seals are shown as editable BOQ accessory rows.'],
     ['Partition frame pricing', 'Spiralis frame/component rates exclude glass.'],
     ['Partition glass', 'Shown as local supply reference line.'],
     ['Door pricing basis', 'Revised price list is door without glass unless the acoustic laminated E100 package is selected.'],
