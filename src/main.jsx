@@ -109,6 +109,7 @@ const initialRooms = [
     layoutType: 'fullSequence',
     width: 4200,
     depth: 3600,
+    height: 3000,
     components: {
       partition1Width: 1500,
       partition2Width: 1200,
@@ -130,6 +131,7 @@ const initialRooms = [
     layoutType: 'twoPartitionOneDoor',
     width: 3000,
     depth: 2800,
+    height: 3000,
     components: {
       partition1Width: 1200,
       partition2Width: 900,
@@ -317,23 +319,27 @@ function getTotalRunLengthMm(room) {
   return getRoomMapSegments(room).reduce((sum, segment) => sum + Number(segment.width), 0);
 }
 
-function areaForRoom(room, height) {
-  return ((getPartitionLengthMm(room) * height) / 1_000_000).toFixed(2);
+function getRoomHeight(room, projectHeight, sameHeightForAllRooms = true) {
+  return sameHeightForAllRooms ? Number(projectHeight) : Number(room.height || projectHeight);
 }
 
-function totalSqmForRoom(room, height) {
-  return (((Number(room.width) * Number(room.depth) * Number(height)) / 1_000_000_000)).toFixed(2);
+function areaForRoom(room, height, sameHeightForAllRooms = true) {
+  return ((getPartitionLengthMm(room) * getRoomHeight(room, height, sameHeightForAllRooms)) / 1_000_000).toFixed(2);
+}
+
+function totalSqmForRoom(room, height, sameHeightForAllRooms = true) {
+  return (((Number(room.width) * Number(room.depth) * getRoomHeight(room, height, sameHeightForAllRooms)) / 1_000_000_000)).toFixed(2);
 }
 
 function perimeterForRoom(room) {
   return (getTotalRunLengthMm(room) / 1000).toFixed(2);
 }
 
-function buildBoq(rooms, height) {
+function buildBoq(rooms, height, sameHeightForAllRooms = true) {
   return rooms.flatMap((room) => {
     const partition = partitionSystems[room.partitionStc];
     const door = doorTypes[room.doorType];
-    const area = Number(areaForRoom(room, height));
+    const area = Number(areaForRoom(room, height, sameHeightForAllRooms));
     const doorCount = getDoorCount(room);
     const rows = [
       {
@@ -422,6 +428,7 @@ function drawTableHeader(doc, columns, y) {
 
 function App() {
   const [height, setHeight] = useState(3000);
+  const [sameHeightForAllRooms, setSameHeightForAllRooms] = useState(true);
   const [rooms, setRooms] = useState(initialRooms);
   const [selectedRoomId, setSelectedRoomId] = useState(initialRooms[0].id);
   const [boqOverrides, setBoqOverrides] = useState({});
@@ -434,7 +441,7 @@ function App() {
   const selectedRoom = rooms.find((room) => room.id === selectedRoomId) ?? rooms[0];
   const selectedDoor = doorTypes[selectedRoom.doorType];
   const selectedPartition = partitionSystems[selectedRoom.partitionStc];
-  const boqRows = useMemo(() => buildBoq(rooms, height), [rooms, height]);
+  const boqRows = useMemo(() => buildBoq(rooms, height, sameHeightForAllRooms), [rooms, height, sameHeightForAllRooms]);
   const editedBoq = boqRows.map((row) => ({ ...row, ...boqOverrides[row.id] }));
   const total = editedBoq.reduce((sum, row) => sum + Number(row.qty) * Number(row.rate), 0);
 
@@ -455,6 +462,7 @@ function App() {
       name: `Room ${String(rooms.length + 1).padStart(2, '0')}`,
       width: 3600,
       depth: 3200,
+      height,
       components: { ...defaultComponents },
       layoutType: 'twoPartitionOneDoor',
       partitionStc: 38,
@@ -508,7 +516,7 @@ function App() {
     doc.text(`Project: ${projectInfo.projectName || 'Untitled project'}`, 14, 57);
     doc.text(`Client: ${projectInfo.clientName || 'Not specified'}`, 14, 64);
     doc.text(`Project height: ${height} mm`, 108, 57);
-    doc.text('Height rule: same height for all rooms', 108, 64);
+    doc.text(`Height rule: ${sameHeightForAllRooms ? 'same height for all rooms' : 'room-specific heights'}`, 108, 64);
 
     doc.setFillColor(244, 242, 237);
     doc.roundedRect(14, 72, 182, 22, 2, 2, 'F');
@@ -542,7 +550,7 @@ function App() {
       doc.setDrawColor(230, 224, 214);
       doc.line(14, y + 2, 196, y + 2);
       doc.text(room.name, 16, y);
-      doc.text(`${perimeterForRoom(room)} lm run`, 58, y);
+      doc.text(`${perimeterForRoom(room)} lm, H ${getRoomHeight(room, height, sameHeightForAllRooms)}mm`, 58, y);
       doc.text(`STC ${room.partitionStc}`, 91, y);
       doc.text(`${room.doorType}, STC ${door.stc}`, 121, y, { maxWidth: 55 });
       doc.text(String(getDoorCount(room)), 188, y, { align: 'right' });
@@ -599,7 +607,7 @@ function App() {
     doc.setFontSize(9);
     addWrappedText(
       doc,
-      'This proposal is generated from the current configurator state. BOQ quantities are editable estimates based on user-entered partition, door, and power bar dimensions plus the common project height. Final pricing should be validated against site conditions, approved specifications, and procurement lead times.',
+      'This proposal is generated from the current configurator state. BOQ quantities are editable estimates based on user-entered partition, door, power bar, and room height dimensions. Final pricing should be validated against site conditions, approved specifications, and procurement lead times.',
       14,
       y + 8,
       182,
@@ -687,9 +695,19 @@ function App() {
                 className="app-slider w-full"
               />
               <label className="flex items-center gap-3 rounded-2xl bg-slate-50 p-4 text-sm font-semibold text-slate-700">
-                <input type="checkbox" checked readOnly className="h-4 w-4 accent-[#2563eb]" />
+                <input
+                  type="checkbox"
+                  checked={sameHeightForAllRooms}
+                  onChange={(event) => setSameHeightForAllRooms(event.target.checked)}
+                  className="h-4 w-4 accent-[#2563eb]"
+                />
                 Same height for all rooms
               </label>
+              {!sameHeightForAllRooms && (
+                <p className="rounded-2xl bg-amber-50 p-4 text-sm font-semibold leading-6 text-amber-800">
+                  Room-specific height is active. Set each room height inside Room Builder.
+                </p>
+              )}
             </div>
           </Card>
 
@@ -709,7 +727,7 @@ function App() {
                     <div>
                       <p className="font-semibold text-slate-950">{room.name}</p>
                       <p className="mt-1 text-sm text-slate-500">
-                        Run {perimeterForRoom(room)} lm, glass {areaForRoom(room, height)} m2
+                        Run {perimeterForRoom(room)} lm, H {getRoomHeight(room, height, sameHeightForAllRooms)} mm, glass {areaForRoom(room, height, sameHeightForAllRooms)} m2
                       </p>
                     </div>
                     <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600">
@@ -728,7 +746,12 @@ function App() {
 
         <div className="space-y-6">
           <div className="grid gap-4 lg:grid-cols-4">
-            <SummaryCard label="Height" value={`${height} mm`} detail="All rooms" icon={Ruler} />
+            <SummaryCard
+              label="Height"
+              value={`${getRoomHeight(selectedRoom, height, sameHeightForAllRooms)} mm`}
+              detail={sameHeightForAllRooms ? 'All rooms' : selectedRoom.name}
+              icon={Ruler}
+            />
             <SummaryCard label="System" value={`STC ${selectedRoom.partitionStc}`} detail={selectedPartition.glass} icon={Layers3} />
             <SummaryCard label="Door Type" value={`STC ${selectedDoor.stc}`} detail={selectedRoom.doorType} icon={DoorOpen} />
             <SummaryCard label="Sell Price" value={currency(total)} detail={`${editedBoq.length} BOQ lines`} icon={FileText} />
@@ -765,16 +788,17 @@ function App() {
                   selectedDoor={selectedDoor}
                   selectedPartition={selectedPartition}
                   height={height}
+                  sameHeightForAllRooms={sameHeightForAllRooms}
                 />
               )}
               {activeTab === 'ai' && (
-                <AiRecommendation room={selectedRoom} selectedDoor={selectedDoor} selectedPartition={selectedPartition} height={height} />
+                <AiRecommendation room={selectedRoom} selectedDoor={selectedDoor} selectedPartition={selectedPartition} height={height} sameHeightForAllRooms={sameHeightForAllRooms} />
               )}
-              {activeTab === 'preview' && <RoomPreview room={selectedRoom} height={height} premium />}
+              {activeTab === 'preview' && <RoomPreview room={selectedRoom} height={height} sameHeightForAllRooms={sameHeightForAllRooms} premium />}
               {activeTab === 'boq' && (
                 <BoqCards rows={editedBoq} updateBoq={updateBoq} total={total} exportProposal={exportProposal} />
               )}
-              {activeTab === 'rules' && <RoomRules room={selectedRoom} height={height} selectedDoor={selectedDoor} />}
+              {activeTab === 'rules' && <RoomRules room={selectedRoom} height={height} sameHeightForAllRooms={sameHeightForAllRooms} selectedDoor={selectedDoor} />}
             </div>
           </section>
         </div>
@@ -826,12 +850,13 @@ function SummaryCard({ label, value, detail, icon: Icon }) {
   );
 }
 
-function RoomBuilder({ room, updateRoom, removeRoom, rooms, selectedDoor, selectedPartition, height }) {
+function RoomBuilder({ room, updateRoom, removeRoom, rooms, selectedDoor, selectedPartition, height, sameHeightForAllRooms }) {
   const components = getComponents(room);
   const layout = getLayout(room);
   const activeInputKeys = getLayoutInputKeys(room);
   const addActions = getRoomAddActions(room);
   const usesDoor2 = activeInputKeys.has('door2Width');
+  const roomHeight = getRoomHeight(room, height, sameHeightForAllRooms);
   const updateComponent = (key, value) => {
     const numericValue = Number(value);
     updateRoom(room.id, {
@@ -887,10 +912,21 @@ function RoomBuilder({ room, updateRoom, removeRoom, rooms, selectedDoor, select
                   className="field"
                 />
               </Field>
-              <InfoPill label="Height" value={`${height} mm`} />
-              <InfoPill label="Total sqm" value={`${totalSqmForRoom(room, height)} sqm`} />
+              <Field label="Partition Height (mm)">
+                <input
+                  type="number"
+                  min="0"
+                  disabled={sameHeightForAllRooms}
+                  value={roomHeight}
+                  onChange={(event) => updateRoom(room.id, { height: Number(event.target.value) })}
+                  className="field disabled:bg-slate-100 disabled:text-slate-500"
+                />
+              </Field>
+              <InfoPill label="Total sqm" value={`${totalSqmForRoom(room, height, sameHeightForAllRooms)} sqm`} />
             </div>
-            <p className="text-sm font-medium text-slate-500">Total sqm = Length x Width x Height.</p>
+            <p className="text-sm font-medium text-slate-500">
+              Total sqm = Length x Width x Height. {sameHeightForAllRooms ? 'Height is controlled by Project Setup.' : 'Room height can be different, for example 600 mm.'}
+            </p>
           </div>
         </BuilderBox>
 
@@ -977,7 +1013,7 @@ function RoomBuilder({ room, updateRoom, removeRoom, rooms, selectedDoor, select
         </BuilderBox>
       </div>
 
-      <RoomConfigurationMap room={room} height={height} updateComponent={updateComponent} updateRoom={updateRoom} editable />
+      <RoomConfigurationMap room={room} height={height} sameHeightForAllRooms={sameHeightForAllRooms} updateComponent={updateComponent} updateRoom={updateRoom} editable />
 
       <div className="grid gap-5 lg:grid-cols-2">
         <BuilderBox title="Dimension Inputs" icon={Ruler}>
@@ -1042,7 +1078,7 @@ function RoomBuilder({ room, updateRoom, removeRoom, rooms, selectedDoor, select
         <BuilderBox title="Add More Partition" icon={Plus}>
           <div className="grid gap-3 md:grid-cols-2">
             <InfoPill label="Supply" value="Local glass" />
-            <InfoPill label="Area" value={`${areaForRoom(room, height)} m2`} />
+            <InfoPill label="Area" value={`${areaForRoom(room, height, sameHeightForAllRooms)} m2`} />
             <InfoPill label="System" value={`STC ${room.partitionStc}`} />
             <InfoPill label="Glass" value={selectedPartition.glass} />
           </div>
@@ -1089,7 +1125,7 @@ function DimensionInput({ number, title, value, onChange, helper }) {
   );
 }
 
-function AiRecommendation({ room, selectedDoor, selectedPartition, height }) {
+function AiRecommendation({ room, selectedDoor, selectedPartition, height, sameHeightForAllRooms }) {
   return (
     <div className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
       <section className="rounded-3xl bg-slate-950 p-6 text-white">
@@ -1099,7 +1135,7 @@ function AiRecommendation({ room, selectedDoor, selectedPartition, height }) {
         </div>
         <h2 className="mt-5 text-2xl font-semibold">Use STC {room.partitionStc} partition with STC {selectedDoor.stc} door package.</h2>
         <p className="mt-4 leading-7 text-slate-300">
-          The selected room dimensions produce {areaForRoom(room, height)} m2 of partition area. Partition frames use Spiralis price-list rates excluding glass, glass is shown as a local supply reference line, and door pricing follows the revised door-without-glass list unless noted.
+          The selected room dimensions produce {areaForRoom(room, height, sameHeightForAllRooms)} m2 of partition area. Partition frames use Spiralis price-list rates excluding glass, glass is shown as a local supply reference line, and door pricing follows the revised door-without-glass list unless noted.
         </p>
       </section>
       <section className="rounded-3xl border border-slate-200 bg-white p-6">
@@ -1171,14 +1207,15 @@ function BoqCards({ rows, updateBoq, total, exportProposal }) {
   );
 }
 
-function RoomRules({ room, height, selectedDoor }) {
+function RoomRules({ room, height, sameHeightForAllRooms, selectedDoor }) {
   const layout = getLayout(room);
+  const roomHeight = getRoomHeight(room, height, sameHeightForAllRooms);
   const rules = [
-    ['Project height first', `${height} mm applies to all rooms.`],
-    ['Same height for all rooms', 'Enabled for this configuration.'],
+    ['Project height first', `${height} mm is the default project height.`],
+    ['Same height for all rooms', sameHeightForAllRooms ? 'Enabled for this configuration.' : `Disabled. This room uses ${roomHeight} mm.`],
     ['Room rule option', `${layout.title}: ${getRoomRuleDescription(room)}.`],
     ['User input dimensions', 'Partition, door, and power bar dimensions are entered by users and drive BOQ quantities.'],
-    ['Partition quantity', `Partition area uses ${((getPartitionLengthMm(room) / 1000)).toFixed(2)} lm x project height.`],
+    ['Partition quantity', `Partition area uses ${((getPartitionLengthMm(room) / 1000)).toFixed(2)} lm x ${roomHeight} mm height.`],
     ['Door quantity', `Door quantity is counted from Door 1 and Door 2 width inputs: ${getDoorCount(room)} set(s).`],
     ['Partition STC request', `Allowed values are ${partitionStcOptions.join(', ')}.`],
     ['Door STC linked to door type', `${room.doorType} maps to STC ${selectedDoor.stc}.`],
@@ -1236,7 +1273,7 @@ function getRoomMapSegments(room) {
     .filter((segment) => segment.width > 0);
 }
 
-function RoomConfigurationMap({ room, height, updateComponent, updateRoom, editable = false }) {
+function RoomConfigurationMap({ room, height, sameHeightForAllRooms = true, updateComponent, updateRoom, editable = false }) {
   const components = getComponents(room);
   const layout = getLayout(room);
   const segments = getRoomMapSegments(room);
@@ -1372,8 +1409,8 @@ function RoomConfigurationMap({ room, height, updateComponent, updateRoom, edita
         </div>
       </div>
       <dl className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
-        <Metric label="Height" value={`${height} mm`} />
-        <Metric label="Total sqm" value={`${totalSqmForRoom(room, height)} sqm`} />
+        <Metric label="Height" value={`${getRoomHeight(room, height, sameHeightForAllRooms)} mm`} />
+        <Metric label="Total sqm" value={`${totalSqmForRoom(room, height, sameHeightForAllRooms)} sqm`} />
         <Metric label="Partition" value={`STC ${room.partitionStc}`} />
         <Metric label="Door" value={`STC ${doorTypes[room.doorType].stc}`} />
       </dl>
@@ -1381,10 +1418,10 @@ function RoomConfigurationMap({ room, height, updateComponent, updateRoom, edita
   );
 }
 
-function RoomPreview({ room, height, premium }) {
+function RoomPreview({ room, height, sameHeightForAllRooms, premium }) {
   return (
     <div className={premium ? 'min-h-[560px]' : ''}>
-      <RoomConfigurationMap room={room} height={height} />
+      <RoomConfigurationMap room={room} height={height} sameHeightForAllRooms={sameHeightForAllRooms} />
     </div>
   );
 }
