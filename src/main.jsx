@@ -13,7 +13,6 @@ import {
   Ruler,
   Sparkles,
   Trash2,
-  Zap,
 } from 'lucide-react';
 import './styles.css';
 
@@ -1050,39 +1049,6 @@ function RoomBuilder({ room, updateRoom, removeRoom, rooms, selectedDoor, select
           <p className="mt-4 text-sm leading-6 text-slate-500">
             Partition quantity follows the selected room rule. Door openings are counted separately from partition area.
           </p>
-        </BuilderBox>
-
-        <BuilderBox title="Power Bar" icon={Zap}>
-          <label className="flex cursor-pointer items-center justify-between gap-4 rounded-2xl bg-slate-50 p-4">
-            <span>
-              <span className="block text-sm font-semibold text-slate-900">Power bar provision</span>
-              <span className="mt-1 block text-sm text-slate-500">Tracked as a room option for review.</span>
-            </span>
-            <input
-              type="checkbox"
-              checked={getPowerBarLengthMm(room) > 0}
-              onChange={(event) =>
-                updateRoom(room.id, {
-                  powerBar: event.target.checked,
-                  components: {
-                    ...components,
-                    powerBarWidth: event.target.checked ? Number(components.powerBarWidth) || 320 : 0,
-                  },
-                })
-              }
-              className="h-5 w-5 accent-blue-600"
-            />
-          </label>
-          <div className="mt-4">
-            <Field label="Power Bar width (mm)">
-              <input
-                type="number"
-                value={components.powerBarWidth}
-                onChange={(event) => updateComponent('powerBarWidth', event.target.value)}
-                className="field"
-              />
-            </Field>
-          </div>
         </BuilderBox>
       </div>
     </div>
